@@ -1,0 +1,34 @@
+# Render Blueprint: Render → New → Blueprint → pick this repo. Values marked sync: false are asked for once.
+services:
+  - type: web
+    name: ai-kanban
+    runtime: docker
+    plan: free
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: AI Kanban
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false # run `php artisan key:generate --show` on your laptop and paste the result
+      - key: APP_URL
+        sync: false # e.g. https://ai-kanban.onrender.com
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        sync: false # Neon connection string: postgresql://user:pass@host/db?sslmode=require
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ALLOW_REGISTRATION
+        value: "true" # change to false once your team has registered

@@ -33,6 +33,7 @@
             @endforeach
         </select>
 
+        <button @click="modal = 'inbox'" class="rounded-md bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700">📥 Add from message</button>
         @if ($aiEnabled)
             <button @click="modal = 'plan'" class="rounded-md bg-indigo-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-indigo-700">✨ AI plan</button>
             <button @click="modal = 'report'" class="rounded-md bg-white border border-indigo-300 text-indigo-700 px-3 py-1.5 text-sm font-medium hover:bg-indigo-50">✨ AI report / ask</button>
@@ -62,6 +63,10 @@
                             <input name="name" value="{{ $column->name }}" class="flex-1 rounded border border-slate-300 px-2 py-0.5 text-sm" x-init="$el.focus()" @keydown.escape="editing = false">
                         </form>
                     </template>
+                    <form method="POST" action="{{ route('columns.sort', $column) }}">
+                        @csrf
+                        <button class="text-slate-400 hover:text-indigo-600 text-xs" title="Sort by priority, then due date">⇅</button>
+                    </form>
                     <form method="POST" action="{{ route('columns.destroy', $column) }}" onsubmit="return confirm('Delete column {{ $column->name }}?')">
                         @csrf @method('DELETE')
                         <button class="text-slate-400 hover:text-red-600 text-xs" title="Delete column">✕</button>
@@ -116,6 +121,26 @@
     {{-- Modals --}}
     <div x-show="modal" x-cloak class="fixed inset-0 z-40 bg-slate-900/40 flex items-start justify-center p-4 overflow-y-auto" @keydown.escape.window="modal = null" @click.self="modal = null">
         <div class="bg-white rounded-xl shadow-xl w-full max-w-xl mt-12 p-6">
+
+            {{-- Add from WhatsApp message --}}
+            <div x-show="modal === 'inbox'">
+                <h2 class="text-lg font-semibold">📥 Add from message</h2>
+                <p class="text-sm text-slate-500 mt-1 mb-3">
+                    Paste an order from WhatsApp. {{ $aiEnabled ? 'The AI picks the title, priority and due date' : 'It becomes a task' }}
+                    in "{{ $board->intakeColumn()->name }}", and the column is sorted by priority.
+                </p>
+                <form method="POST" action="{{ route('inbox.store', $board) }}" @submit="loading = true" class="space-y-3">
+                    @csrf
+                    <textarea name="message" rows="6" required class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                              placeholder="e.g. [9:14 am, 26/10/2026] Encik Ali: Tolong siapkan 50 kotak untuk order Syarikat ABC, perlu hantar sebelum Jumaat. Urgent.">{{ old('message') }}</textarea>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" @click="modal = null" class="px-3 py-1.5 text-sm">Cancel</button>
+                        <button :disabled="loading" class="rounded-md bg-emerald-600 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-60">
+                            <span x-show="!loading">Add to board</span><span x-show="loading">Reading message…</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
 
             {{-- AI plan --}}
             <div x-show="modal === 'plan'">
@@ -187,7 +212,26 @@
                 </div>
 
                 @if ($isOwner)
-                    <form method="POST" action="{{ route('boards.update', $board) }}" class="space-y-2">
+                    <div class="space-y-2">
+                        <h2 class="text-lg font-semibold">📱 WhatsApp → board (iPhone)</h2>
+                        @if ($board->inboxUrl())
+                            <p class="text-sm text-slate-500">Paste this secret link into your "Add to Kanban" shortcut. Anyone with the link can add tasks, so keep it private.</p>
+                            <div class="flex gap-2" x-data="{ copied: false }">
+                                <input readonly value="{{ $board->inboxUrl() }}" class="flex-1 rounded-md border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-mono" @focus="$el.select()">
+                                <button type="button" @click="navigator.clipboard.writeText('{{ $board->inboxUrl() }}'); copied = true"
+                                        class="rounded-md bg-slate-800 text-white px-3 py-1.5 text-sm" x-text="copied ? 'Copied' : 'Copy'"></button>
+                            </div>
+                        @else
+                            <p class="text-sm text-slate-500">Create a secret link so you can share WhatsApp messages straight to this board from your iPhone.</p>
+                        @endif
+                        <form method="POST" action="{{ route('inbox.token', $board) }}"
+                              @if ($board->inboxUrl()) onsubmit="return confirm('Make a new link? The old link will stop working.')" @endif>
+                            @csrf
+                            <button class="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">{{ $board->inboxUrl() ? 'Make a new link' : 'Create inbox link' }}</button>
+                        </form>
+                    </div>
+
+                    <form method="POST" action="{{ route('boards.update', $board) }}" class="space-y-2 pt-4 border-t border-slate-200">
                         @csrf @method('PUT')
                         <h2 class="text-lg font-semibold">Board details</h2>
                         <input name="name" value="{{ $board->name }}" required class="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm">

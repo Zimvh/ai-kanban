@@ -41,7 +41,7 @@
 
     <div class="px-4 sm:px-6 pt-4 space-y-2">
         @if (session('status'))
-            <div class="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 text-sm">{{ session('status') }}</div>
+            <div class="rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 text-sm whitespace-pre-line">{{ session('status') }}</div>
         @endif
         @if ($errors->any())
             <div class="rounded-md bg-red-50 border border-red-200 text-red-800 px-4 py-2 text-sm">

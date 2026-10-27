@@ -6,6 +6,7 @@ use App\Http\Controllers\BoardController;
 use App\Http\Controllers\ChecklistController;
 use App\Http\Controllers\ColumnController;
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\InboxController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
@@ -48,6 +49,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('checklist/{item}', [ChecklistController::class, 'destroy'])->name('checklist.destroy');
     Route::post('tasks/{task}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
+
+    // WhatsApp inbox & priority sort
+    Route::post('boards/{board}/inbox', [InboxController::class, 'store'])->name('inbox.store');
+    Route::post('boards/{board}/inbox-token', [InboxController::class, 'token'])->name('inbox.token');
+    Route::post('columns/{column}/sort', [InboxController::class, 'sort'])->name('columns.sort');
 
     // AI
     Route::post('boards/{board}/ai/plan', [AiController::class, 'plan'])->name('ai.plan');

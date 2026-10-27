@@ -2,33 +2,37 @@
 
 namespace App\Services;
 
-use Anthropic\Client;
 use App\Models\Board;
 use App\Models\Task;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Every Claude call in the app goes through this class.
- * To change model / effort, edit .env (ANTHROPIC_MODEL, ANTHROPIC_EFFORT).
+ * Every OpenAI call in the app goes through this class.
+ * To change model / effort, edit .env (OPENAI_MODEL, OPENAI_EFFORT).
  */
 class AiAssistant
 {
-    private Client $client;
+    private PendingRequest $client;
 
     public function __construct()
     {
-        $key = config('services.anthropic.key');
+        $key = config('services.openai.key');
 
         if (blank($key)) {
-            throw new RuntimeException('AI is not configured. Add ANTHROPIC_API_KEY to your .env file.');
+            throw new RuntimeException('AI is not configured. Add OPENAI_API_KEY to your .env file.');
         }
 
-        $this->client = new Client(apiKey: $key);
+        $this->client = Http::baseUrl('https://api.openai.com/v1')
+            ->withToken($key)
+            ->acceptJson()
+            ->timeout(120);
     }
 
     public static function enabled(): bool
     {
-        return filled(config('services.anthropic.key'));
+        return filled(config('services.openai.key'));
     }
 
     /**
@@ -86,6 +90,66 @@ class AiAssistant
             'required' => ['tasks'],
             'additionalProperties' => false,
         ]);
+
+        return $data['tasks'];
+    }
+
+    /**
+     * Turn a forwarded WhatsApp message (an order / instruction from a superior) into tasks.
+     * Runs at low effort so the iPhone shortcut gets an answer within a few seconds.
+     *
+     * @return list<array{title: string, description: string, priority: string, labels: string, due_date: string, checklist: list<string>}>
+     */
+    public function readOrderMessage(Board $board, string $message): array
+    {
+        $today = now()->format('l, Y-m-d');
+
+        $prompt = <<<TXT
+        A team member forwarded this WhatsApp message to our kanban board. It is usually an order or
+        instruction from a superior. Turn it into tasks. Today is {$today}.
+
+        Message:
+        """
+        {$message}
+        """
+
+        Existing tasks on the board (if the message repeats one, still add it; the team will merge):
+        {$this->boardContext($board)}
+
+        Rules:
+        - Usually one task per message. Only split into several tasks when the message clearly lists separate jobs.
+        - title: short and action-oriented, in the same language as the message, under 80 characters
+        - description: 1-3 sentences on what needs to be done, including names, quantities, places and amounts from the message
+        - priority: high if it says urgent / ASAP / segera / today / tomorrow, or the deadline is within 2 days;
+          low if it says no rush / when free / bila senang; otherwise medium
+        - labels: comma separated; include the sender's name if the message shows it, plus a short topic
+        - due_date: YYYY-MM-DD resolved from words like "tomorrow", "Friday", "end of month"; empty string if none
+        - checklist: 0-5 short steps, only if the message implies several steps
+        TXT;
+
+        $data = $this->json($prompt, [
+            'type' => 'object',
+            'properties' => [
+                'tasks' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'title' => ['type' => 'string'],
+                            'description' => ['type' => 'string'],
+                            'priority' => ['type' => 'string', 'enum' => Task::PRIORITIES],
+                            'labels' => ['type' => 'string'],
+                            'due_date' => ['type' => 'string'],
+                            'checklist' => ['type' => 'array', 'items' => ['type' => 'string']],
+                        ],
+                        'required' => ['title', 'description', 'priority', 'labels', 'due_date', 'checklist'],
+                        'additionalProperties' => false,
+                    ],
+                ],
+            ],
+            'required' => ['tasks'],
+            'additionalProperties' => false,
+        ], effort: 'low');
 
         return $data['tasks'];
     }
@@ -162,7 +226,7 @@ class AiAssistant
         TXT);
     }
 
-    /** Plain-text dump of the board that Claude reads as context. */
+    /** Plain-text dump of the board that the AI reads as context. */
     private function boardContext(Board $board): string
     {
         $board->loadMissing('columns.tasks.assignee', 'columns.tasks.checklist');
@@ -195,40 +259,44 @@ class AiAssistant
         return $this->send($prompt);
     }
 
-    private function json(string $prompt, array $schema): array
+    private function json(string $prompt, array $schema, ?string $effort = null): array
     {
-        $text = $this->send($prompt, ['type' => 'json_schema', 'schema' => $schema]);
+        $text = $this->send($prompt, [
+            'type' => 'json_schema',
+            'json_schema' => ['name' => 'result', 'strict' => true, 'schema' => $schema],
+        ], $effort);
 
         return json_decode($text, true, flags: JSON_THROW_ON_ERROR);
     }
 
-    private function send(string $prompt, ?array $format = null): string
+    private function send(string $prompt, ?array $format = null, ?string $effort = null): string
     {
-        $outputConfig = ['effort' => config('services.anthropic.effort')];
+        $payload = [
+            'model' => config('services.openai.model'),
+            'messages' => [['role' => 'user', 'content' => $prompt]],
+            'reasoning_effort' => $effort ?? config('services.openai.effort'),
+            'max_completion_tokens' => 16000,
+        ];
         if ($format) {
-            $outputConfig['format'] = $format;
+            $payload['response_format'] = $format;
         }
 
-        $message = $this->client->beta->messages->create(
-            model: config('services.anthropic.model'),
-            maxTokens: 16000,
-            messages: [['role' => 'user', 'content' => $prompt]],
-            outputConfig: $outputConfig,
-            // If the main model declines a request, the API retries on a fallback model.
-            betas: ['server-side-fallback-2026-07-01'],
-            fallbacks: 'default',
-        );
+        $response = $this->client->post('/chat/completions', $payload);
 
-        if ($message->stopReason === 'refusal') {
+        if ($response->failed()) {
+            throw new RuntimeException('The AI request failed: '.($response->json('error.message') ?? $response->status()));
+        }
+
+        $message = $response->json('choices.0.message');
+
+        if (filled($message['refusal'] ?? null)) {
             throw new RuntimeException('The AI declined this request. Try rephrasing it.');
         }
 
-        foreach ($message->content as $block) {
-            if ($block->type === 'text') {
-                return $block->text;
-            }
+        if (blank($message['content'] ?? null)) {
+            throw new RuntimeException('The AI returned an empty response.');
         }
 
-        throw new RuntimeException('The AI returned an empty response.');
+        return $message['content'];
     }
 }

@@ -48,6 +48,12 @@ class Board extends Model
         return $this->owner_id === $user->id;
     }
 
+    /** The secret URL the iPhone shortcut posts forwarded messages to. */
+    public function inboxUrl(): ?string
+    {
+        return $this->inbox_token ? route('inbox.receive', $this->inbox_token) : null;
+    }
+
     /** The column new / AI-generated tasks land in: "To Do" if present, else the first. */
     public function intakeColumn(): Column
     {

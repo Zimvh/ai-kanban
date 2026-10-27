@@ -19,4 +19,23 @@ class Column extends Model
     {
         return $this->hasMany(Task::class)->orderBy('position');
     }
+
+    /** Reorder the column: high → medium → low, then earliest due date (no date last), then current order. */
+    public function sortByPriority(): void
+    {
+        $rank = array_flip(array_reverse(Task::PRIORITIES)); // high => 0, medium => 1, low => 2
+
+        $this->tasks()->get()
+            ->sortBy([
+                fn (Task $a, Task $b) => ($rank[$a->priority] ?? 1) <=> ($rank[$b->priority] ?? 1),
+                fn (Task $a, Task $b) => ($a->due_date?->timestamp ?? PHP_INT_MAX) <=> ($b->due_date?->timestamp ?? PHP_INT_MAX),
+                fn (Task $a, Task $b) => $a->position <=> $b->position,
+            ])
+            ->values()
+            ->each(function (Task $task, int $position): void {
+                if ($task->position !== $position) {
+                    $task->update(['position' => $position]);
+                }
+            });
+    }
 }

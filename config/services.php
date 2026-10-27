@@ -35,10 +35,10 @@ return [
         ],
     ],
 
-    'anthropic' => [
-        'key' => env('ANTHROPIC_API_KEY'),
-        'model' => env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
-        'effort' => env('ANTHROPIC_EFFORT', 'medium'), // low | medium | high
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-5'),
+        'effort' => env('OPENAI_EFFORT', 'medium'), // low | medium | high
     ],
 
 ];

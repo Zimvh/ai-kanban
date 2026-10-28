@@ -132,6 +132,48 @@ class InboxTest extends TestCase
         $this->assertSame(1, $task->attachments()->count());
     }
 
+    public function test_shortcut_sends_photos_and_text_together_as_files(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+        $this->fakeAi([[
+            'title' => 'Fix the cracked shelf', 'description' => 'See photos.', 'priority' => 'medium',
+            'labels' => 'maintenance', 'due_date' => '', 'checklist' => [],
+        ]]);
+
+        $this->post("/api/inbox/{$board->inbox_token}", [
+            'message' => "IMG_0101.jpeg\nIMG_0102.jpeg\nBoss: tolong repair rak ni",
+            'photo' => [
+                UploadedFile::fake()->image('IMG_0101.jpeg'),
+                UploadedFile::fake()->image('IMG_0102.jpeg'),
+                UploadedFile::fake()->createWithContent('text.txt', 'Boss: tolong repair rak ni'),
+            ],
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        $task = Task::sole();
+        $this->assertSame('Fix the cracked shelf', $task->title);
+        $this->assertStringContainsString('> Boss: tolong repair rak ni', $task->description);
+        $this->assertStringNotContainsString('IMG_0101', $task->description);
+        $this->assertSame(2, $task->attachments()->count());
+    }
+
+    public function test_photo_shared_as_text_is_only_its_file_name_so_it_becomes_a_photo_task(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+
+        $this->post("/api/inbox/{$board->inbox_token}", [
+            'message' => 'IMG_0101.jpeg',
+            'photo' => [UploadedFile::fake()->image('IMG_0101.jpeg')],
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        $this->assertStringStartsWith('Photo from WhatsApp', Task::sole()->title);
+    }
+
     public function test_shortcut_needs_a_message_or_a_photo(): void
     {
         $user = User::factory()->create();

@@ -48,18 +48,17 @@ Without the phone: **📥 Add from message** on the board, paste, done. **⇅** 
 **Add to Kanban**. A notification shows what was added. (First time: scroll the share sheet, tap
 *Edit Actions* and add *Add to Kanban* to favourites.)
 
-**Photos:** make a second shortcut, **Add Photo to Kanban**, with the same inbox link:
+**Photos, or photo + text together:** change the shortcut so it takes both:
 
-1. Shortcuts → **+** → name it **Add Photo to Kanban**. Add action **Get Contents of URL**, then set the top line
-   *Receive … from …* to **Images** from **Share Sheet**.
-2. **Get Contents of URL**: URL = the inbox link, Method **POST**, Headers `Accept` = `application/json`,
-   Request Body **Form**, add field `photo` of type **File** = **Shortcut Input**.
-3. Add **Get Dictionary Value** (key `message` in *Contents of URL*) and **Show Notification** (*Dictionary Value*).
+1. Top line *Receive … from Share Sheet*: tick **Text** and **Images**.
+2. **Get Contents of URL** → Request Body **Form** (instead of JSON), with two fields:
+   - `message` (**Text**) = **Shortcut Input**
+   - `photo[]` (**File**) = **Shortcut Input**
 
-Use it: in WhatsApp, open the photo → **share icon** → **Add Photo to Kanban**. It becomes a task in **To Do**
-with the photo attached (the AI doesn't read photos). Photos are shrunk to 1600 px and stored in the database,
-because Render's free disk is wiped on every deploy. You can also add photos on a task's page or in
-**📥 Add from message**.
+In WhatsApp, select the photo and its message together (long-press → **Forward** → tick both → **share icon**)
+→ **Add to Kanban**. The AI reads the text and the photos are attached to that task. A photo alone becomes
+a task called "Photo from WhatsApp". Photos are shrunk to 1600 px and stored in the database, because
+Render's free disk is wiped on every deploy. You can also add photos on a task's page or in **📥 Add from message**.
 
 ## Host it free (Render + Neon)
 

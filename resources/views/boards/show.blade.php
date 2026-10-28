@@ -134,8 +134,8 @@
                     @csrf
                     <textarea name="message" rows="6" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                               placeholder="e.g. [9:14 am, 26/10/2026] Encik Ali: Tolong siapkan 50 kotak untuk order Syarikat ABC, perlu hantar sebelum Jumaat. Urgent.">{{ old('message') }}</textarea>
-                    <label class="block text-sm"><span class="text-xs text-slate-500">📷 Photo (optional)</span>
-                        <input type="file" name="photo" accept="image/*" class="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm">
+                    <label class="block text-sm"><span class="text-xs text-slate-500">📷 Photos (optional)</span>
+                        <input type="file" name="photo[]" accept="image/*" multiple class="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm">
                     </label>
                     <div class="flex justify-end gap-2">
                         <button type="button" @click="modal = null" class="px-3 py-1.5 text-sm">Cancel</button>

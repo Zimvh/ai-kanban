@@ -9,26 +9,29 @@ use App\Services\OrderInbox;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class InboxController extends Controller
 {
+    /** Image types kept as photos. SVG is left out on purpose: it can carry scripts. */
+    private const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+
     public function __construct()
     {
         set_time_limit(120); // the AI reads the message (and the photo is shrunk) before we answer
     }
 
-    /** Called by the iPhone shortcuts (text as JSON, photos as a form upload). The secret token in the URL picks the board. */
+    /** Called by the iPhone "Add to Kanban" shortcut. The secret token in the URL picks the board. */
     public function receive(Request $request, string $token, OrderInbox $inbox): JsonResponse
     {
         $board = Board::where('inbox_token', $token)->first();
         abort_if($board === null, 404, 'Unknown inbox link. Copy it again from the board settings.');
 
-        $data = $request->validate([
-            'message' => ['required_without:photo', 'nullable', 'string', 'max:10000'],
-            'photo' => ['nullable', 'image', 'max:10240'],
-        ]);
-        $tasks = $inbox->add($board, $data['message'] ?? null, photo: $request->file('photo'));
+        [$message, $photos] = $this->messageAndPhotos($request);
+        $tasks = $inbox->add($board, $message, photos: $photos);
 
         return response()->json([
             'ok' => true,
@@ -43,16 +46,13 @@ class InboxController extends Controller
         ]);
     }
 
-    /** "Add from message" box on the board: paste a WhatsApp message and/or pick a photo. */
+    /** "Add from message" box on the board: paste a WhatsApp message and/or pick photos. */
     public function store(Request $request, Board $board, OrderInbox $inbox): RedirectResponse
     {
         $this->authorizeBoard($board);
-        $data = $request->validate([
-            'message' => ['required_without:photo', 'nullable', 'string', 'max:10000'],
-            'photo' => ['nullable', 'image', 'max:10240'],
-        ]);
+        [$message, $photos] = $this->messageAndPhotos($request);
 
-        $tasks = $inbox->add($board, $data['message'] ?? null, $request->user(), $request->file('photo'));
+        $tasks = $inbox->add($board, $message, $request->user(), $photos);
 
         return back()->with('status', $this->summary($tasks));
     }
@@ -72,6 +72,39 @@ class InboxController extends Controller
         $column->sortByPriority();
 
         return back();
+    }
+
+    /**
+     * Read the message and photos from the request. The iPhone shortcut sends whatever WhatsApp shared
+     * (text, photos or both) as `message` and/or `photo` / `photo[]` files, so a shared text arrives as
+     * a .txt file and a photo turned into text arrives as just its file name.
+     *
+     * @return array{0: string, 1: list<UploadedFile>}
+     */
+    private function messageAndPhotos(Request $request): array
+    {
+        $request->validate([
+            'message' => ['nullable', 'string', 'max:10000'],
+            'photo' => is_array($request->file('photo')) ? ['array', 'max:10'] : ['nullable', 'file', 'max:10240'],
+            'photo.*' => ['file', 'max:10240'],
+        ]);
+
+        $files = Arr::wrap($request->file('photo'));
+        $photos = array_values(array_filter($files, fn (UploadedFile $file) => in_array($file->getMimeType(), self::PHOTO_TYPES, true)));
+        $texts = array_filter($files, fn (UploadedFile $file) => str_starts_with((string) $file->getMimeType(), 'text/plain'));
+
+        $message = collect(preg_split('/\R/', (string) $request->input('message')))
+            ->reject(fn (string $line) => preg_match('/^\s*[\w\-. ]+\.(jpe?g|png|heic|heif|gif|webp)\s*$/i', $line))
+            ->implode("\n");
+        if (trim($message) === '') {
+            $message = collect($texts)->map(fn (UploadedFile $file) => trim($file->get()))->filter()->implode("\n\n");
+        }
+
+        if (trim($message) === '' && $photos === []) {
+            throw ValidationException::withMessages(['message' => 'Send a message, a photo, or both.']);
+        }
+
+        return [mb_substr($message, 0, 10000), $photos];
     }
 
     /** @param list<Task> $tasks */

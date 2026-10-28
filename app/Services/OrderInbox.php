@@ -12,16 +12,17 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Turns a forwarded WhatsApp message (and/or photo) into tasks in the board's intake column ("To Do"),
- * then sorts that column by priority. Used by the iPhone shortcuts and the "Add from message" box.
- * A photo is attached to the first task; a photo without a message becomes its own task (no AI).
+ * Turns a forwarded WhatsApp message (and/or photos) into tasks in the board's intake column ("To Do"),
+ * then sorts that column by priority. Used by the iPhone shortcut and the "Add from message" box.
+ * Photos are attached to the first task; photos without a message become their own task (no AI).
  */
 class OrderInbox
 {
     /**
+     * @param  list<UploadedFile>  $photos
      * @return list<Task>
      */
-    public function add(Board $board, ?string $message, ?User $user = null, ?UploadedFile $photo = null): array
+    public function add(Board $board, ?string $message, ?User $user = null, array $photos = []): array
     {
         $message = trim((string) $message);
         $column = $board->intakeColumn();
@@ -49,7 +50,7 @@ class OrderInbox
             $created[] = $task;
         }
 
-        if ($photo) {
+        foreach ($photos as $photo) {
             Attachment::storePhoto($created[0], $photo, $user);
         }
 

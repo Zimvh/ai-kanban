@@ -15,17 +15,20 @@ class InboxController extends Controller
 {
     public function __construct()
     {
-        set_time_limit(120); // the AI reads the message before we answer
+        set_time_limit(120); // the AI reads the message (and the photo is shrunk) before we answer
     }
 
-    /** Called by the iPhone "Add to Kanban" shortcut. The secret token in the URL picks the board. */
+    /** Called by the iPhone shortcuts (text as JSON, photos as a form upload). The secret token in the URL picks the board. */
     public function receive(Request $request, string $token, OrderInbox $inbox): JsonResponse
     {
         $board = Board::where('inbox_token', $token)->first();
         abort_if($board === null, 404, 'Unknown inbox link. Copy it again from the board settings.');
 
-        $data = $request->validate(['message' => ['required', 'string', 'max:10000']]);
-        $tasks = $inbox->add($board, $data['message']);
+        $data = $request->validate([
+            'message' => ['required_without:photo', 'nullable', 'string', 'max:10000'],
+            'photo' => ['nullable', 'image', 'max:10240'],
+        ]);
+        $tasks = $inbox->add($board, $data['message'] ?? null, photo: $request->file('photo'));
 
         return response()->json([
             'ok' => true,
@@ -40,13 +43,16 @@ class InboxController extends Controller
         ]);
     }
 
-    /** "Add from message" box on the board: paste a WhatsApp message. */
+    /** "Add from message" box on the board: paste a WhatsApp message and/or pick a photo. */
     public function store(Request $request, Board $board, OrderInbox $inbox): RedirectResponse
     {
         $this->authorizeBoard($board);
-        $data = $request->validate(['message' => ['required', 'string', 'max:10000']]);
+        $data = $request->validate([
+            'message' => ['required_without:photo', 'nullable', 'string', 'max:10000'],
+            'photo' => ['nullable', 'image', 'max:10240'],
+        ]);
 
-        $tasks = $inbox->add($board, $data['message'], $request->user());
+        $tasks = $inbox->add($board, $data['message'] ?? null, $request->user(), $request->file('photo'));
 
         return back()->with('status', $this->summary($tasks));
     }

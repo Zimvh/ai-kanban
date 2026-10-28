@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\ChecklistController;
@@ -43,12 +44,15 @@ Route::middleware('auth')->group(function () {
     Route::delete('tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
     Route::post('tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
 
-    // Checklist & comments
+    // Checklist, comments & photos
     Route::post('tasks/{task}/checklist', [ChecklistController::class, 'store'])->name('checklist.store');
     Route::patch('checklist/{item}', [ChecklistController::class, 'toggle'])->name('checklist.toggle');
     Route::delete('checklist/{item}', [ChecklistController::class, 'destroy'])->name('checklist.destroy');
     Route::post('tasks/{task}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}', [CommentController::class, 'destroy'])->name('comments.destroy');
+    Route::post('tasks/{task}/attachments', [AttachmentController::class, 'store'])->name('attachments.store');
+    Route::get('attachments/{attachment}', [AttachmentController::class, 'show'])->name('attachments.show');
+    Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
 
     // WhatsApp inbox & priority sort
     Route::post('boards/{board}/inbox', [InboxController::class, 'store'])->name('inbox.store');

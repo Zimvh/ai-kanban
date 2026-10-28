@@ -7,6 +7,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Services\AiAssistant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -92,6 +93,54 @@ class InboxTest extends TestCase
         $task = Task::first();
         $this->assertSame('Urgent: call supplier XYZ', $task->title);
         $this->assertSame('high', $task->priority);
+    }
+
+    public function test_shortcut_photo_without_message_becomes_its_own_task(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+        $this->fakeAi([]);
+
+        $this->post("/api/inbox/{$board->inbox_token}", ['photo' => UploadedFile::fake()->image('IMG_0042.jpg')], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $task = Task::sole();
+        $this->assertStringStartsWith('Photo from WhatsApp', $task->title);
+        $this->assertSame('To Do', $task->column->name);
+        $this->assertSame('IMG_0042.jpg', $task->attachments()->sole()->filename);
+    }
+
+    public function test_photo_is_attached_to_task_read_from_message(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->fakeAi([[
+            'title' => 'Check damaged boxes', 'description' => 'See photo.', 'priority' => 'high',
+            'labels' => 'stock', 'due_date' => '', 'checklist' => [],
+        ]]);
+
+        $this->post("/boards/{$board->id}/inbox", [
+            'message' => 'Boss: check these damaged boxes today',
+            'photo' => UploadedFile::fake()->image('boxes.jpg'),
+        ])->assertSessionHasNoErrors();
+
+        $task = Task::sole();
+        $this->assertSame('Check damaged boxes', $task->title);
+        $this->assertSame(1, $task->attachments()->count());
+    }
+
+    public function test_shortcut_needs_a_message_or_a_photo(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+
+        $this->postJson("/api/inbox/{$board->inbox_token}", [])->assertJsonValidationErrors('message');
+        $this->assertSame(0, Task::count());
     }
 
     public function test_column_sorts_by_priority_then_due_date(): void

@@ -44,6 +44,7 @@ class BoardController extends Controller
                 'checklist',
                 'checklist as checklist_done_count' => fn ($q) => $q->where('done', true),
                 'comments',
+                'attachments',
             ]),
             'members',
         ]);

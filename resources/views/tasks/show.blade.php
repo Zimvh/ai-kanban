@@ -87,6 +87,35 @@
                 </form>
             </section>
 
+            {{-- Photos --}}
+            <section class="bg-white rounded-lg border border-slate-200 p-5">
+                <h2 class="font-semibold mb-3">Photos</h2>
+                @if ($task->attachments->isNotEmpty())
+                    <ul class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+                        @foreach ($task->attachments as $attachment)
+                            <li class="group relative">
+                                <a href="{{ route('attachments.show', $attachment) }}" target="_blank" class="block aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                                    <img src="{{ route('attachments.show', $attachment) }}" alt="{{ $attachment->filename }}" loading="lazy" class="h-full w-full object-cover">
+                                </a>
+                                @if ($attachment->user_id === auth()->id() || $board->isOwner(auth()->user()))
+                                    <form method="POST" action="{{ route('attachments.destroy', $attachment) }}" onsubmit="return confirm('Delete this photo?')"
+                                          class="absolute top-1 right-1 opacity-0 group-hover:opacity-100">
+                                        @csrf @method('DELETE')
+                                        <button class="rounded bg-white/90 px-1.5 text-xs text-slate-500 hover:text-red-600">✕</button>
+                                    </form>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+                <form method="POST" action="{{ route('attachments.store', $task) }}" enctype="multipart/form-data" class="flex items-center gap-2">
+                    @csrf
+                    <input type="file" name="photos[]" accept="image/*" multiple required
+                           class="flex-1 min-w-0 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm">
+                    <button class="rounded-md bg-slate-800 text-white px-3 py-1 text-sm">Upload</button>
+                </form>
+            </section>
+
             {{-- Comments --}}
             <section class="bg-white rounded-lg border border-slate-200 p-5">
                 <h2 class="font-semibold mb-3">Comments</h2>
@@ -143,7 +172,7 @@
                         </button>
                     </form>
                 @else
-                    <p class="text-xs text-slate-500">Add <code>ANTHROPIC_API_KEY</code> to <code>.env</code> to enable.</p>
+                    <p class="text-xs text-slate-500">Add <code>OPENAI_API_KEY</code> to <code>.env</code> to enable.</p>
                 @endif
             </div>
 

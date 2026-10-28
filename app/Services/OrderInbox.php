@@ -2,31 +2,35 @@
 
 namespace App\Services;
 
+use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\Task;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Turns a forwarded WhatsApp message into tasks in the board's intake column ("To Do"),
- * then sorts that column by priority. Used by the iPhone shortcut and the "Add from message" box.
+ * Turns a forwarded WhatsApp message (and/or photo) into tasks in the board's intake column ("To Do"),
+ * then sorts that column by priority. Used by the iPhone shortcuts and the "Add from message" box.
+ * A photo is attached to the first task; a photo without a message becomes its own task (no AI).
  */
 class OrderInbox
 {
     /**
      * @return list<Task>
      */
-    public function add(Board $board, string $message, ?User $user = null): array
+    public function add(Board $board, ?string $message, ?User $user = null, ?UploadedFile $photo = null): array
     {
-        $message = trim($message);
+        $message = trim((string) $message);
         $column = $board->intakeColumn();
         $position = $column->tasks()->max('position') + 1;
-        $original = "\n\n---\n**Original message:**\n\n".collect(explode("\n", $message))->map(fn ($line) => '> '.$line)->implode("\n");
+        $original = $message === '' ? '' : "\n\n---\n**Original message:**\n\n".collect(explode("\n", $message))->map(fn ($line) => '> '.$line)->implode("\n");
+        $items = $message === '' ? [$this->photoOnly()] : $this->read($board, $message);
 
         $created = [];
-        foreach ($this->read($board, $message) as $item) {
+        foreach ($items as $item) {
             $task = $column->tasks()->create([
                 'board_id' => $board->id,
                 'created_by' => $user?->id ?? $board->owner_id,
@@ -43,6 +47,10 @@ class OrderInbox
             }
 
             $created[] = $task;
+        }
+
+        if ($photo) {
+            Attachment::storePhoto($created[0], $photo, $user);
         }
 
         $column->sortByPriority();
@@ -79,6 +87,19 @@ class OrderInbox
             'due_date' => '',
             'checklist' => [],
         ]];
+    }
+
+    /** @return array{title: string, description: string, priority: string, labels: string, due_date: string, checklist: list<string>} */
+    private function photoOnly(): array
+    {
+        return [
+            'title' => 'Photo from WhatsApp · '.now()->format('j M, g:i A'),
+            'description' => 'Photo shared from WhatsApp. Open the task to see it.',
+            'priority' => 'medium',
+            'labels' => 'photo',
+            'due_date' => '',
+            'checklist' => [],
+        ];
     }
 
     private function parseDate(string $value): ?Carbon

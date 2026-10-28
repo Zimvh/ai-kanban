@@ -2,7 +2,7 @@
 FROM php:8.5-apache
 
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions pdo_pgsql pdo_sqlite opcache zip intl
+RUN install-php-extensions pdo_pgsql pdo_sqlite opcache zip intl gd exif
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -15,7 +15,8 @@ RUN a2enmod rewrite headers \
     && sed -ri 's!<VirtualHost \*:80>!<VirtualHost *:${PORT}>!' /etc/apache2/sites-available/000-default.conf \
     && printf '<Directory /var/www/html/public>\n    AllowOverride All\n</Directory>\n' > /etc/apache2/conf-available/laravel.conf \
     && a2enconf laravel \
-    && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+    && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && printf 'upload_max_filesize = 10M\npost_max_size = 12M\nmemory_limit = 256M\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
 
 WORKDIR /var/www/html
 

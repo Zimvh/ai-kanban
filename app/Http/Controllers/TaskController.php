@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Board;
+use App\Models\Attachment;
 use App\Models\Column;
 use App\Models\Task;
 use App\Services\AiAssistant;
@@ -31,7 +31,10 @@ class TaskController extends Controller
     public function show(Task $task)
     {
         $this->authorizeBoard($task->board);
-        $task->load('board.members', 'board.columns', 'column', 'assignee', 'checklist', 'comments.user');
+        $task->load([
+            'board.members', 'board.columns', 'column', 'assignee', 'checklist', 'comments.user',
+            'attachments' => fn ($q) => $q->select(Attachment::LIST_COLUMNS),
+        ]);
 
         return view('tasks.show', [
             'task' => $task,

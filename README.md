@@ -58,6 +58,10 @@ Without the phone: **📥 Add from message** on the board, paste, done. **⇅** 
 
 (Form upload also works: `photo[]` as a **File** field = **Shortcut Input**, if your iOS lets you pick it.)
 
+**Sender name:** WhatsApp's share button doesn't pass on who sent the message. Add action **Ask for Input**
+(prompt "Who sent this?", type Text) before *Get Contents of URL*, and a JSON **Text** field `sender` =
+**Provided Input**. The name becomes a label, a **From:** line and part of what the AI reads. Leave it empty to skip.
+
 In WhatsApp, select the photo and its message together (long-press → **Forward** → tick both → **share icon**)
 → **Add to Kanban**. The AI reads the text and the photos are attached to that task. A photo alone becomes
 a task called "Photo from WhatsApp". Photos are shrunk to 1600 px and stored in the database, because

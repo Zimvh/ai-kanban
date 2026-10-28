@@ -30,8 +30,8 @@ class InboxController extends Controller
         $board = Board::where('inbox_token', $token)->first();
         abort_if($board === null, 404, 'Unknown inbox link. Copy it again from the board settings.');
 
-        [$message, $photos] = $this->messageAndPhotos($request);
-        $tasks = $inbox->add($board, $message, photos: $photos);
+        [$message, $photos, $sender] = $this->messageAndPhotos($request);
+        $tasks = $inbox->add($board, $message, photos: $photos, sender: $sender);
 
         return response()->json([
             'ok' => true,
@@ -50,9 +50,9 @@ class InboxController extends Controller
     public function store(Request $request, Board $board, OrderInbox $inbox): RedirectResponse
     {
         $this->authorizeBoard($board);
-        [$message, $photos] = $this->messageAndPhotos($request);
+        [$message, $photos, $sender] = $this->messageAndPhotos($request);
 
-        $tasks = $inbox->add($board, $message, $request->user(), $photos);
+        $tasks = $inbox->add($board, $message, $request->user(), $photos, $sender);
 
         return back()->with('status', $this->summary($tasks));
     }
@@ -78,9 +78,9 @@ class InboxController extends Controller
      * Read the message and photos from the request. The iPhone shortcut sends whatever WhatsApp shared
      * (text, photos or both) as `message` plus either `photo` / `photo[]` files or a `photos` text field
      * of base64 items, one per line. A shared text can arrive as a .txt file or base64 item, and a photo
-     * turned into text arrives as just its file name.
+     * turned into text arrives as just its file name. `sender` is the name the shortcut asked for (optional).
      *
-     * @return array{0: string, 1: list<UploadedFile>}
+     * @return array{0: string, 1: list<UploadedFile>, 2: ?string}
      */
     private function messageAndPhotos(Request $request): array
     {
@@ -89,6 +89,7 @@ class InboxController extends Controller
             'photo' => is_array($request->file('photo')) ? ['array', 'max:10'] : ['nullable', 'file', 'max:10240'],
             'photo.*' => ['file', 'max:10240'],
             'photos' => ['nullable', 'string', 'max:50000000'],
+            'sender' => ['nullable', 'string', 'max:100'],
         ]);
 
         $files = [...Arr::wrap($request->file('photo')), ...$this->decodeBase64Files((string) $request->input('photos'))];
@@ -106,7 +107,7 @@ class InboxController extends Controller
             throw ValidationException::withMessages(['message' => 'Send a message, a photo, or both.']);
         }
 
-        return [mb_substr($message, 0, 10000), $photos];
+        return [mb_substr($message, 0, 10000), $photos, $request->input('sender')];
     }
 
     /**

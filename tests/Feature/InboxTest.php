@@ -198,6 +198,40 @@ class InboxTest extends TestCase
         $this->assertStringStartsWith('Photo from WhatsApp', Task::sole()->title);
     }
 
+    public function test_sender_name_from_shortcut_is_added_to_task(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+        $this->fakeAi([[
+            'title' => 'Call supplier XYZ', 'description' => 'About late stock.', 'priority' => 'high',
+            'labels' => 'encik ali, supplier', 'due_date' => '', 'checklist' => [],
+        ]]);
+
+        $this->postJson("/api/inbox/{$board->inbox_token}", ['message' => 'Call supplier XYZ today', 'sender' => ' Encik  Ali '])
+            ->assertOk();
+
+        $task = Task::sole();
+        $this->assertSame('whatsapp, Encik Ali, supplier', $task->labels);
+        $this->assertStringStartsWith("**From:** Encik Ali\n\nAbout late stock.", $task->description);
+    }
+
+    public function test_photo_only_task_is_named_after_sender(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+
+        $this->postJson("/api/inbox/{$board->inbox_token}", [
+            'photos' => base64_encode(UploadedFile::fake()->image('a.jpg')->get()),
+            'sender' => 'Puan Siti',
+        ])->assertOk();
+
+        $this->assertStringStartsWith('Photo from Puan Siti · ', Task::sole()->title);
+    }
+
     public function test_shortcut_needs_a_message_or_a_photo(): void
     {
         $user = User::factory()->create();

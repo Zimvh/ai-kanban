@@ -15,6 +15,7 @@ use Throwable;
  * Turns a forwarded WhatsApp message (and/or photos) into tasks in the board's intake column ("To Do"),
  * then sorts that column by priority. Used by the iPhone shortcut and the "Add from message" box.
  * Photos are attached to the first task; photos without a message become their own task (no AI).
+ * WhatsApp's share button doesn't pass on who sent the message, so the shortcut can ask and send it as `sender`.
  */
 class OrderInbox
 {
@@ -22,13 +23,15 @@ class OrderInbox
      * @param  list<UploadedFile>  $photos
      * @return list<Task>
      */
-    public function add(Board $board, ?string $message, ?User $user = null, array $photos = []): array
+    public function add(Board $board, ?string $message, ?User $user = null, array $photos = [], ?string $sender = null): array
     {
         $message = trim((string) $message);
+        $sender = mb_substr(Str::squish((string) $sender), 0, 60);
         $column = $board->intakeColumn();
         $position = $column->tasks()->max('position') + 1;
+        $from = $sender === '' ? '' : "**From:** {$sender}\n\n";
         $original = $message === '' ? '' : "\n\n---\n**Original message:**\n\n".collect(explode("\n", $message))->map(fn ($line) => '> '.$line)->implode("\n");
-        $items = $message === '' ? [$this->photoOnly()] : $this->read($board, $message);
+        $items = $message === '' ? [$this->photoOnly($sender)] : $this->read($board, $sender === '' ? $message : "{$sender}: {$message}");
 
         $created = [];
         foreach ($items as $item) {
@@ -36,9 +39,9 @@ class OrderInbox
                 'board_id' => $board->id,
                 'created_by' => $user?->id ?? $board->owner_id,
                 'title' => mb_substr($item['title'], 0, 255),
-                'description' => $item['description'].$original,
+                'description' => $from.$item['description'].$original,
                 'priority' => in_array($item['priority'], Task::PRIORITIES, true) ? $item['priority'] : 'medium',
-                'labels' => mb_substr(collect(['whatsapp', ...explode(',', $item['labels'])])->map(fn ($l) => trim($l))->filter()->unique()->implode(', '), 0, 255),
+                'labels' => mb_substr(collect(['whatsapp', $sender, ...explode(',', $item['labels'])])->map(fn ($l) => trim($l))->filter()->unique(fn ($l) => mb_strtolower($l))->implode(', '), 0, 255),
                 'due_date' => $this->parseDate($item['due_date']),
                 'position' => $position++,
             ]);
@@ -91,10 +94,10 @@ class OrderInbox
     }
 
     /** @return array{title: string, description: string, priority: string, labels: string, due_date: string, checklist: list<string>} */
-    private function photoOnly(): array
+    private function photoOnly(string $sender): array
     {
         return [
-            'title' => 'Photo from WhatsApp · '.now()->format('j M, g:i A'),
+            'title' => 'Photo from '.($sender ?: 'WhatsApp').' · '.now()->format('j M, g:i A'),
             'description' => 'Photo shared from WhatsApp. Open the task to see it.',
             'priority' => 'medium',
             'labels' => 'photo',

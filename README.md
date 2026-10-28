@@ -51,9 +51,12 @@ Without the phone: **📥 Add from message** on the board, paste, done. **⇅** 
 **Photos, or photo + text together:** change the shortcut so it takes both:
 
 1. Top line *Receive … from Share Sheet*: tick **Text** and **Images**.
-2. **Get Contents of URL** → Request Body **Form** (instead of JSON), with two fields:
-   - `message` (**Text**) = **Shortcut Input**
-   - `photo[]` (**File**) = **Shortcut Input**
+2. Add action **Base64 Encode** above *Get Contents of URL*: input **Shortcut Input**, tap **›** and set
+   **Line Breaks** to **None**.
+3. In *Get Contents of URL* (Request Body stays **JSON**), add a second **Text** field:
+   `photos` = **Base64 Encoded**. Keep `message` = **Shortcut Input**.
+
+(Form upload also works: `photo[]` as a **File** field = **Shortcut Input**, if your iOS lets you pick it.)
 
 In WhatsApp, select the photo and its message together (long-press → **Forward** → tick both → **share icon**)
 → **Add to Kanban**. The AI reads the text and the photos are attached to that task. A photo alone becomes

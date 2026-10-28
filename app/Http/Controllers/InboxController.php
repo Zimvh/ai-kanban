@@ -76,8 +76,9 @@ class InboxController extends Controller
 
     /**
      * Read the message and photos from the request. The iPhone shortcut sends whatever WhatsApp shared
-     * (text, photos or both) as `message` and/or `photo` / `photo[]` files, so a shared text arrives as
-     * a .txt file and a photo turned into text arrives as just its file name.
+     * (text, photos or both) as `message` plus either `photo` / `photo[]` files or a `photos` text field
+     * of base64 items, one per line. A shared text can arrive as a .txt file or base64 item, and a photo
+     * turned into text arrives as just its file name.
      *
      * @return array{0: string, 1: list<UploadedFile>}
      */
@@ -87,9 +88,10 @@ class InboxController extends Controller
             'message' => ['nullable', 'string', 'max:10000'],
             'photo' => is_array($request->file('photo')) ? ['array', 'max:10'] : ['nullable', 'file', 'max:10240'],
             'photo.*' => ['file', 'max:10240'],
+            'photos' => ['nullable', 'string', 'max:50000000'],
         ]);
 
-        $files = Arr::wrap($request->file('photo'));
+        $files = [...Arr::wrap($request->file('photo')), ...$this->decodeBase64Files((string) $request->input('photos'))];
         $photos = array_values(array_filter($files, fn (UploadedFile $file) => in_array($file->getMimeType(), self::PHOTO_TYPES, true)));
         $texts = array_filter($files, fn (UploadedFile $file) => str_starts_with((string) $file->getMimeType(), 'text/plain'));
 
@@ -105,6 +107,30 @@ class InboxController extends Controller
         }
 
         return [mb_substr($message, 0, 10000), $photos];
+    }
+
+    /**
+     * Turn base64 items (one per line, as the shortcut's "Base64 Encode" action makes them) into temporary
+     * files, so they go through the same checks as uploaded photos. Lines that aren't base64 are skipped.
+     *
+     * @return list<UploadedFile>
+     */
+    private function decodeBase64Files(string $items): array
+    {
+        $files = [];
+        foreach (preg_split('/\s+/', trim($items), -1, PREG_SPLIT_NO_EMPTY) as $i => $item) {
+            $bytes = base64_decode($item, true);
+            if ($bytes === false || $bytes === '' || strlen($bytes) > 10 * 1024 * 1024 || $i >= 10) {
+                continue;
+            }
+
+            $path = tempnam(sys_get_temp_dir(), 'inbox');
+            file_put_contents($path, $bytes);
+            app()->terminating(fn () => @unlink($path));
+            $files[] = new UploadedFile($path, 'whatsapp-'.($i + 1), null, null, true);
+        }
+
+        return $files;
     }
 
     /** @param list<Task> $tasks */

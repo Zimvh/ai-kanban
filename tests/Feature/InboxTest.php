@@ -159,6 +159,30 @@ class InboxTest extends TestCase
         $this->assertSame(2, $task->attachments()->count());
     }
 
+    public function test_shortcut_sends_photos_as_base64_lines_in_json(): void
+    {
+        $user = User::factory()->create();
+        $board = $this->boardFor($user);
+        $this->post("/boards/{$board->id}/inbox-token");
+        $board->refresh();
+        $this->fakeAi([[
+            'title' => 'Fix the cracked shelf', 'description' => 'See photo.', 'priority' => 'medium',
+            'labels' => 'maintenance', 'due_date' => '', 'checklist' => [],
+        ]]);
+        $photo = base64_encode(UploadedFile::fake()->image('IMG_0101.jpeg')->get());
+        $text = base64_encode('Boss: tolong repair rak ni');
+
+        $this->postJson("/api/inbox/{$board->inbox_token}", [
+            'message' => "IMG_0101.jpeg\nBoss: tolong repair rak ni",
+            'photos' => "{$photo}\n{$text}",
+        ])->assertOk();
+
+        $task = Task::sole();
+        $this->assertSame('Fix the cracked shelf', $task->title);
+        $this->assertStringContainsString('> Boss: tolong repair rak ni', $task->description);
+        $this->assertSame('image/jpeg', $task->attachments()->sole()->mime_type);
+    }
+
     public function test_photo_shared_as_text_is_only_its_file_name_so_it_becomes_a_photo_task(): void
     {
         $user = User::factory()->create();
